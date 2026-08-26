@@ -2,17 +2,8 @@
 // - github.com/Vauth/duckgpt - //
 // ---------------------------- //
 
-const MODELS = [
-  '@cf/meta/llama-3.1-8b-instruct',      // Best balanced model (Recommended)
-  '@cf/meta/llama-3.2-3b-instruct',      // Ultra-fast, lightweight
-  '@cf/meta/llama-3.1-70b-instruct',     // High intelligence (Uses more neurons)
-  '@cf/mistral/mistral-7b-instruct-v0.1', // Reliable alternative to Llama
-  '@cf/google/gemma-7b-it',              // Google's lightweight model
-  '@cf/qwen/qwen1.5-7b-chat'             // Good for multilingual tasks
-];
-
-const MAIN_MODEL = '@cf/meta/llama-3.1-8b-instruct'; 
-const ERROR_404 = {"action":"error", "status": 404, "usage": "GET /chat/?prompt=<text>&model=<model>&history=<List[Dict{str, str}]>", "models": MODELS};
+const MAIN_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'; 
+const ERROR_404 = {"action":"error", "status": 404, "usage": "GET /chat/?prompt=<text>&model=<model>&history=<List[Dict{str, str}]>"};
 const HEAD_JSON = { 'content-type': 'application/json', 'Access-Control-Allow-Origin': "*"};
 const HEAD_HTML = { 'content-type': 'text/html', 'Access-Control-Allow-Origin': "*"};
 
@@ -41,19 +32,47 @@ export default {
 
 async function Chat(prompt, history, model, env) {
   try {
-    const messages = JSON.parse(history);
+    let messages = [];
+    if (typeof history === "string" && history.trim() !== "") {
+      messages = JSON.parse(history);
+    } else if (Array.isArray(history)) {
+      messages = [...history];
+    }
+
     messages.push({ role: "user", content: prompt });
 
-    const response = await env.AI.run(model, {
+    const result = await env.AI.run(model, {
       messages: [
         { role: "system", content: "You are a helpful assistant named 'DuckGPT'." },
         ...messages
       ]
     });
 
-    return {"action":"success", "status": 200, "response": response.response, "model": model};
+    let textOutput = "";
+    if (result?.response) {
+      textOutput = result.response;
+    } else if (result?.choices?.[0]?.message?.content) {
+      textOutput = result.choices[0].message.content;
+    } else if (result?.output?.[0]?.content?.[0]?.text) {
+      textOutput = result.output[0].content[0].text;
+    } else if (typeof result === "string") {
+      textOutput = result;
+    } else {
+      textOutput = JSON.stringify(result);
+    }
+
+    return {
+      action: "success",
+      status: 200,
+      response: textOutput,
+      model: model
+    };
   } catch (error) {
-    return { "action":"error", "status": 403, "response": error.message };
+    return {
+      action: "error",
+      status: 403,
+      response: error.message
+    };
   }
 }
 
